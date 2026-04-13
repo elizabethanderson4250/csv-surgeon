@@ -1,11 +1,23 @@
+"""Main CLI entry point for csv-surgeon."""
 import argparse
 import sys
+
 from csv_surgeon.reader import StreamingCSVReader
 from csv_surgeon.writer import StreamingCSVWriter
 from csv_surgeon.pipeline import FilterPipeline
 from csv_surgeon.transform_pipeline import TransformPipeline
-import csv_surgeon.filters as filters
-import csv_surgeon.transforms as transforms
+from csv_surgeon import filters as F
+from csv_surgeon import transforms as T
+from csv_surgeon.cli_dedup import add_dedup_subparser, run_dedup
+from csv_surgeon.cli_join import add_join_subparser, run_join
+from csv_surgeon.cli_pivot import add_pivot_subparser, run_pivot
+from csv_surgeon.cli_sample import add_sample_subparser, run_sample
+from csv_surgeon.cli_validate import add_validate_subparser, run_validate
+from csv_surgeon.cli_schema import add_schema_subparser, run_schema
+from csv_surgeon.cli_sort import add_sort_subparser, run_sort
+from csv_surgeon.cli_diff import add_diff_subparser, run_diff
+from csv_surgeon.cli_aggregate import add_aggregate_subparser, run_aggregate
+from csv_surgeon.cli_flatten import add_flatten_subparser, run_flatten
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -13,94 +25,105 @@ def build_arg_parser() -> argparse.ArgumentParser:
         prog="csv-surgeon",
         description="Surgical column transformations and filtering on large CSV files.",
     )
-    parser.add_argument("input", help="Path to input CSV file")
-    parser.add_argument("-o", "--output", help="Path to output CSV file (default: stdout)")
-    parser.add_argument("--delimiter", default=",", help="CSV delimiter (default: comma)")
-    parser.add_argument(
-        "--filter",
-        action="append",
-        metavar="COL:OP:VALUE",
-        dest="filter_rules",
-        help="Filter rule in format column:operator:value (e.g. age:gt:18)",
+    subparsers = parser.add_subparsers(dest="command")
+
+    # core filter/transform command
+    process = subparsers.add_parser("process", help="Filter and transform a CSV file")
+    process.add_argument("input", help="Input CSV file")
+    process.add_argument("output", help="Output CSV file")
+    process.add_argument(
+        "--filter", dest="filters", action="append", metavar="RULE",
+        help="Filter rule: column:op:value",
     )
-    parser.add_argument(
-        "--transform",
-        action="append",
-        metavar="COL:OP[:VALUE]",
-        dest="transform_rules",
-        help="Transform rule in format column:operation[:value] (e.g. name:uppercase)",
+    process.add_argument(
+        "--transform", dest="transforms", action="append", metavar="RULE",
+        help="Transform rule: column:op[:args]",
     )
+
+    add_dedup_subparser(subparsers)
+    add_join_subparser(subparsers)
+    add_pivot_subparser(subparsers)
+    add_sample_subparser(subparsers)
+    add_validate_subparser(subparsers)
+    add_schema_subparser(subparsers)
+    add_sort_subparser(subparsers)
+    add_diff_subparser(subparsers)
+    add_aggregate_subparser(subparsers)
+    add_flatten_subparser(subparsers)
+
     return parser
-
-
-FILTER_MAP = {
-    "eq": filters.equals,
-    "neq": filters.not_equals,
-    "contains": filters.contains,
-    "gt": filters.greater_than,
-    "lt": filters.less_than,
-}
-
-TRANSFORM_MAP = {
-    "uppercase": transforms.uppercase,
-    "lowercase": transforms.lowercase,
-    "strip": transforms.strip_whitespace,
-    "rename": transforms.rename,
-    "replace": transforms.replace,
-}
 
 
 def parse_filter_rules(rules):
     pipeline = FilterPipeline()
     for rule in (rules or []):
-        parts = rule.split(":", 2)
-        if len(parts) < 3:
-            print(f"Invalid filter rule: {rule}", file=sys.stderr)
-            sys.exit(1)
-        col, op, val = parts
-        if op not in FILTER_MAP:
-            print(f"Unknown filter operator: {op}", file=sys.stderr)
-            sys.exit(1)
-        pipeline.add_filter(FILTER_MAP[op](col, val))
+        parts = rule.split(":")
+        col, op = parts[0], parts[1]
+        val = parts[2] if len(parts) > 2 else ""
+        if op == "eq":
+            pipeline.add_filter(F.equals(col, val))
+        elif op == "ne":
+            pipeline.add_filter(F.not_equals(col, val))
+        elif op == "contains":
+            pipeline.add_filter(F.contains(col, val))
+        elif op == "gt":
+            pipeline.add_filter(F.greater_than(col, float(val)))
+        elif op == "lt":
+            pipeline.add_filter(F.less_than(col, float(val)))
     return pipeline
 
 
 def parse_transform_rules(rules):
     pipeline = TransformPipeline()
     for rule in (rules or []):
-        parts = rule.split(":", 2)
+        parts = rule.split(":")
         col, op = parts[0], parts[1]
-        val = parts[2] if len(parts) > 2 else None
-        if op not in TRANSFORM_MAP:
-            print(f"Unknown transform operation: {op}", file=sys.stderr)
-            sys.exit(1)
-        pipeline.add_transform(TRANSFORM_MAP[op](col, val) if val else TRANSFORM_MAP[op](col))
+        if op == "upper":
+            pipeline.add_transform(T.uppercase(col))
+        elif op == "lower":
+            pipeline.add_transform(T.lowercase(col))
+        elif op == "strip":
+            pipeline.add_transform(T.strip_whitespace(col))
+        elif op == "rename" and len(parts) > 2:
+            pipeline.add_transform(T.rename(col, parts[2]))
+        elif op == "replace" and len(parts) > 3:
+            pipeline.add_transform(T.replace(col, parts[2], parts[3]))
     return pipeline
 
 
-def run(args=None):
+def run(argv=None):
     parser = build_arg_parser()
-    parsed = parser.parse_args(args)
+    args = parser.parse_args(argv)
 
-    reader = StreamingCSVReader(parsed.input, delimiter=parsed.delimiter)
-    filter_pipeline = parse_filter_rules(parsed.filter_rules)
-    transform_pipeline = parse_transform_rules(parsed.transform_rules)
+    if args.command is None:
+        parser.print_help()
+        sys.exit(0)
 
-    filtered = filter_pipeline.execute(reader.rows())
-    transformed = transform_pipeline.execute(filtered)
-
-    if parsed.output:
-        writer = StreamingCSVWriter(parsed.output, reader.headers(), delimiter=parsed.delimiter)
-        count = writer.write_rows(transformed)
-        print(f"Written {count} rows to {parsed.output}")
-    else:
-        import csv, io
-        out = io.TextIOWrapper(sys.stdout.buffer, newline="")
-        w = csv.DictWriter(out, fieldnames=reader.headers(), delimiter=parsed.delimiter)
-        w.writeheader()
-        for row in transformed:
-            w.writerow(row)
-
-
-if __name__ == "__main__":
-    run()
+    if args.command == "process":
+        reader = StreamingCSVReader(args.input)
+        filter_pipeline = parse_filter_rules(args.filters)
+        transform_pipeline = parse_transform_rules(args.transforms)
+        rows = filter_pipeline.execute(reader.rows())
+        rows = transform_pipeline.execute(rows)
+        writer = StreamingCSVWriter(args.output, fieldnames=reader.headers)
+        writer.write_rows(rows)
+    elif args.command == "dedup":
+        run_dedup(args)
+    elif args.command == "join":
+        run_join(args)
+    elif args.command == "pivot":
+        run_pivot(args)
+    elif args.command == "sample":
+        run_sample(args)
+    elif args.command == "validate":
+        run_validate(args)
+    elif args.command == "schema":
+        run_schema(args)
+    elif args.command == "sort":
+        run_sort(args)
+    elif args.command == "diff":
+        run_diff(args)
+    elif args.command == "aggregate":
+        run_aggregate(args)
+    elif args.command == "flatten":
+        run_flatten(args)
