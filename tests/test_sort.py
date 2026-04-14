@@ -92,3 +92,16 @@ def test_sort_preserves_all_fields():
     rows = make_rows()
     result = list(sort_rows(rows, key_columns=["name"]))
     assert all("age" in r and "score" in r for r in result)
+
+
+def test_sort_stable_preserves_original_order_for_equal_keys():
+    """Verify that sort_rows is stable: rows with equal keys retain their original order."""
+    rows = [
+        {"name": "Alice", "age": "25", "score": "95.0"},
+        {"name": "Bob", "age": "25", "score": "70.0"},
+        {"name": "Charlie", "age": "30", "score": "88.5"},
+    ]
+    # Both Alice and Bob share age="25"; stable sort should keep Alice before Bob.
+    result = list(sort_rows(rows, key_columns=["age"], numeric=True))
+    assert result[0]["name"] == "Alice"
+    assert result[1]["name"] == "Bob"
