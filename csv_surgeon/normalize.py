@@ -66,3 +66,15 @@ def remove_non_alphanumeric(value, keep_spaces=False):
     if not keep_spaces:
         result = re.sub(r"\s+", "", result)
     return result
+
+
+@_normalizer
+def replace(value, old, new=""):
+    """Replace all occurrences of a substring within a column value.
+
+    Args:
+        value: The current cell value.
+        old: The substring to search for.
+        new: The replacement string (default: empty string, effectively removing matches).
+    """
+    return str(value).replace(old, new)
