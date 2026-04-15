@@ -95,13 +95,19 @@ def test_sort_preserves_all_fields():
 
 
 def test_sort_stable_preserves_original_order_for_equal_keys():
-    """Verify that sort_rows is stable: rows with equal keys retain their original order."""
+    """Verify that stable sort preserves original insertion order for rows with equal keys."""
     rows = [
         {"name": "Alice", "age": "25", "score": "95.0"},
         {"name": "Bob", "age": "25", "score": "70.0"},
-        {"name": "Charlie", "age": "30", "score": "88.5"},
+        {"name": "Charlie", "age": "25", "score": "88.5"},
     ]
-    # Both Alice and Bob share age="25"; stable sort should keep Alice before Bob.
+    # All rows have the same age; stable sort should preserve original order
     result = list(sort_rows(rows, key_columns=["age"], numeric=True))
-    assert result[0]["name"] == "Alice"
-    assert result[1]["name"] == "Bob"
+    names = [r["name"] for r in result]
+    assert names == ["Alice", "Bob", "Charlie"]
+
+
+def test_sort_by_key_func_empty_rows():
+    """Verify that sort_by_key_func handles an empty input without raising."""
+    result = list(sort_by_key_func([], key_func=lambda r: r.get("name", "")))
+    assert result == []
