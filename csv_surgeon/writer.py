@@ -1,70 +1,86 @@
+"""Streaming CSV writer — writes rows one at a time without buffering all data."""
+from __future__ import annotations
+
 import csv
 import io
-from typing import Iterator, List, Optional, Dict, Any
+from typing import Dict, Iterable, List, Optional
 
 
 class StreamingCSVWriter:
-    """
-    Writes CSV rows to a file or stream without buffering all rows in memory.
-    Supports writing from dicts or raw row lists.
-    """
+    """Write dicts (or raw lists) to a CSV file row by row."""
 
-    def __init__(self, output_path: str, fieldnames: List[str], delimiter: str = ",", lineterminator: str = "\n"):
-        self.output_path = output_path
+    def __init__(self, path: str, fieldnames: Optional[List[str]] = None) -> None:
+        self.path = path
         self.fieldnames = fieldnames
-        self.delimiter = delimiter
-        self.lineterminator = lineterminator
 
-    def write_rows(self, rows: Iterator[Dict[str, Any]], write_header: bool = True) -> int:
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def write_rows(
+        self,
+        rows: Iterable[Dict[str, str]],
+        fieldnames: Optional[List[str]] = None,
+    ) -> int:
+        """Write an iterable of dicts to *self.path*.
+
+        Returns the number of data rows written (header not counted).
         """
-        Write an iterator of dict rows to the output file.
-        Returns the number of rows written (excluding header).
+        effective_fields = fieldnames or self.fieldnames
+        count = 0
+        with open(self.path, "w", newline="", encoding="utf-8") as fh:
+            writer: Optional[csv.DictWriter] = None
+            for row in rows:
+                if writer is None:
+                    fields = effective_fields or list(row.keys())
+                    writer = csv.DictWriter(
+                        fh, fieldnames=fields, extrasaction="ignore"
+                    )
+                    writer.writeheader()
+                writer.writerow(row)
+                count += 1
+            if writer is None:
+                # No rows — write header only if we know the fields
+                if effective_fields:
+                    writer = csv.DictWriter(fh, fieldnames=effective_fields)
+                    writer.writeheader()
+        return count
+
+    def write_raw_rows(
+        self,
+        rows: Iterable[List[str]],
+        header: Optional[List[str]] = None,
+    ) -> int:
+        """Write raw lists (no header inference from row keys).
+
+        If *header* is provided it is written as the first row.
+        Returns the number of data rows written.
         """
         count = 0
-        with open(self.output_path, "w", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=self.fieldnames,
-                delimiter=self.delimiter,
-                lineterminator=self.lineterminator,
-                extrasaction="ignore",
-            )
-            if write_header:
-                writer.writeheader()
+        with open(self.path, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            if header:
+                writer.writerow(header)
             for row in rows:
                 writer.writerow(row)
                 count += 1
         return count
 
-    def write_raw_rows(self, rows: Iterator[List[str]], write_header: bool = True) -> int:
-        """
-        Write an iterator of raw list rows to the output file.
-        Returns the number of rows written (excluding header).
-        """
-        count = 0
-        with open(self.output_path, "w", newline="") as f:
-            writer = csv.writer(f, delimiter=self.delimiter, lineterminator=self.lineterminator)
-            if write_header:
-                writer.writerow(self.fieldnames)
-            for row in rows:
-                writer.writerow(row)
-                count += 1
-        return count
-
-    def to_string(self, rows: Iterator[Dict[str, Any]], write_header: bool = True) -> str:
-        """
-        Serialize rows to a CSV-formatted string (useful for testing / piping).
-        """
-        output = io.StringIO()
-        writer = csv.DictWriter(
-            output,
-            fieldnames=self.fieldnames,
-            delimiter=self.delimiter,
-            lineterminator=self.lineterminator,
-            extrasaction="ignore",
-        )
-        if write_header:
-            writer.writeheader()
+    def to_string(
+        self,
+        rows: Iterable[Dict[str, str]],
+        fieldnames: Optional[List[str]] = None,
+    ) -> str:
+        """Return the CSV content as a string (useful for testing)."""
+        effective_fields = fieldnames or self.fieldnames
+        buf = io.StringIO()
+        writer: Optional[csv.DictWriter] = None
         for row in rows:
+            if writer is None:
+                fields = effective_fields or list(row.keys())
+                writer = csv.DictWriter(
+                    buf, fieldnames=fields, extrasaction="ignore"
+                )
+                writer.writeheader()
             writer.writerow(row)
-        return output.getvalue()
+        return buf.getvalue()
