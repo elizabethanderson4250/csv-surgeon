@@ -31,12 +31,34 @@ def add_dedup_subparser(subparsers: argparse._SubParsersAction) -> None:  # type
     parser.set_defaults(func=run_dedup)
 
 
-def run_dedup(args: argparse.Namespace) -> None:
-    """Execute the dedup sub-command."""
-    columns: List[str] = [c.strip() for c in args.columns.split(",") if c.strip()]
+def _parse_columns(columns_arg: str) -> List[str]:
+    """Parse and validate the comma-separated columns argument.
+
+    Parameters
+    ----------
+    columns_arg:
+        Raw string value from ``--columns``, e.g. ``"name,email"``.
+
+    Returns
+    -------
+    List[str]
+        Non-empty list of stripped column names.
+
+    Raises
+    ------
+    SystemExit
+        If the resulting list is empty.
+    """
+    columns = [c.strip() for c in columns_arg.split(",") if c.strip()]
     if not columns:
         print("Error: --columns must not be empty.", file=sys.stderr)
         sys.exit(1)
+    return columns
+
+
+def run_dedup(args: argparse.Namespace) -> None:
+    """Execute the dedup sub-command."""
+    columns: List[str] = _parse_columns(args.columns)
 
     reader = StreamingCSVReader(args.input)
 
