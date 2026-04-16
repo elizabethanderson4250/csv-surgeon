@@ -73,6 +73,18 @@ def test_fraction_writes_header(sample_csv, output_path):
     assert "name" in rows[0]
 
 
+def test_reservoir_is_reproducible(sample_csv, output_path, tmp_path):
+    """Same seed should produce identical reservoir samples."""
+    output_path2 = str(tmp_path / "out2.csv")
+    args1 = _make_args(input=sample_csv, output=output_path, reservoir=5, seed=42)
+    args2 = _make_args(input=sample_csv, output=output_path2, reservoir=5, seed=42)
+    run_sample(args1)
+    run_sample(args2)
+    rows1 = _read_csv(output_path)
+    rows2 = _read_csv(output_path2)
+    assert rows1 == rows2
+
+
 def test_subparser_registered():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers()
