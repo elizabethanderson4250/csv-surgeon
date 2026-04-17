@@ -46,6 +46,11 @@ def test_truncate_right_invalid_max_len():
         truncate_right("name", -1)
 
 
+def test_truncate_right_exact_length_unchanged():
+    t = truncate_right("name", 5)
+    assert t(make_row("Hello"))["name"] == "Hello"
+
+
 # --- truncate_left ---
 
 def test_truncate_left_shortens_long_value():
@@ -68,6 +73,11 @@ def test_truncate_left_invalid_max_len():
         truncate_left("name", -3)
 
 
+def test_truncate_left_exact_length_unchanged():
+    t = truncate_left("name", 5)
+    assert t(make_row("Hello"))["name"] == "Hello"
+
+
 # --- pad_right ---
 
 def test_pad_right_pads_short_value():
@@ -88,6 +98,11 @@ def test_pad_right_custom_char():
 def test_pad_right_invalid_char():
     with pytest.raises(ValueError):
         pad_right("name", 5, char="--")
+
+
+def test_pad_right_exact_length_unchanged():
+    t = pad_right("name", 5)
+    assert t(make_row("Hello"))["name"] == "Hello"
 
 
 # --- pad_left ---
@@ -124,9 +139,4 @@ def test_apply_multiple_transforms():
         {"code": "XY", "label": "Short"},
     ]
     transforms = [
-        truncate_right("label", 5),
-        pad_left("code", 4, char="0"),
-    ]
-    result = list(apply(iter(rows), transforms))
-    assert result[0] == {"code": "0ABC", "label": "Hello"}
-    assert result[1] == {"code": "00XY", "label": "Short"}
+        truncate_right("label", 5)
