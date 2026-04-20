@@ -89,3 +89,14 @@ def test_parse_condition_matches_correctly():
     cond = _parse_condition("city=Paris")
     assert cond({"city": "Paris"}) is True
     assert cond({"city": "London"}) is False
+
+
+def test_conditional_empty_string_values(tmp_path, output_path):
+    """Ensure true_value or false_value can be empty strings."""
+    p = tmp_path / "input.csv"
+    p.write_text("name,status,label\nAlice,active,old\nBob,inactive,old\n")
+    args = _Args(str(p), output_path, "label", "status=active", "ACTIVE", "")
+    run_conditional(args)
+    rows = _read_csv(output_path)
+    inactive = [r for r in rows if r["status"] == "inactive"]
+    assert all(r["label"] == "" for r in inactive)
