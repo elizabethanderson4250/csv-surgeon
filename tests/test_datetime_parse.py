@@ -44,6 +44,12 @@ def test_format_date_invalid_unchanged():
     assert t(row)["date"] == "bad"
 
 
+def test_format_date_missing_column_unchanged():
+    t = format_date("missing", in_fmt="%Y-%m-%d", out_fmt="%d/%m/%Y")
+    row = make_row()
+    assert t(row) == row
+
+
 def test_extract_part_year():
     t = extract_part("date", "year")
     row = make_row("2024-03-15")
@@ -94,6 +100,14 @@ def test_apply_chains_transforms():
 def test_parse_date_does_not_mutate_original():
     t = parse_date("date", fmt="%d/%m/%Y")
     row = make_row("15/03/2024")
+    original = dict(row)
+    t(row)
+    assert row == original
+
+
+def test_format_date_does_not_mutate_original():
+    t = format_date("date", in_fmt="%Y-%m-%d", out_fmt="%d/%m/%Y")
+    row = make_row("2024-03-15")
     original = dict(row)
     t(row)
     assert row == original
